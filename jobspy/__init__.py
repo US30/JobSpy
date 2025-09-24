@@ -5,6 +5,7 @@ from typing import Tuple
 
 import pandas as pd
 
+from .scrapers.freejobalert import FreeJobAlertScraper
 from jobspy.bayt import BaytScraper
 from jobspy.bdjobs import BDJobs
 from jobspy.glassdoor import Glassdoor
@@ -64,6 +65,7 @@ def scrape_jobs(
         Site.BAYT: BaytScraper,
         Site.NAUKRI: Naukri,
         Site.BDJOBS: BDJobs,  # Add BDJobs to the scraper mapping
+        Site.FREEJOBALERT: FreeJobAlertScraper,
     }
     set_logger_level(verbose)
     job_type = get_enum_from_value(job_type) if job_type else None
