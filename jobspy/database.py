@@ -1,5 +1,3 @@
-# In jobspy/database.py
-
 import os
 import re
 from datetime import datetime, date, time, timezone
@@ -7,6 +5,10 @@ from pymongo import MongoClient
 import pandas as pd
 from sentence_transformers import SentenceTransformer
 import pymongo
+
+# --- New Imports ---
+from .analysis.resume_parser import parse_resume
+from .analysis.llm_analyser import extract_skills_with_llm
 
 # --- CONFIGURATION ---
 MONGO_CONNECTION_STRING = os.environ.get("MONGO_URI", "mongodb://localhost:27017/")
@@ -34,14 +36,28 @@ def create_indexes(collection_name: str):
     except Exception as e:
         print(f"An error occurred during index creation for '{collection_name}': {e}")
 
+# --- ADD THE MISSING FUNCTION DEFINITION HERE ---
+def create_resume_indexes(collection_name: str):
+    """ Creates indexes on the resumes collection for efficient filtering. """
+    print(f"Ensuring indexes exist on '{collection_name}' collection...")
+    try:
+        collection = db[collection_name]
+        collection.create_index([("metadata.name", pymongo.ASCENDING)])
+        collection.create_index([("metadata.extracted_skills", pymongo.ASCENDING)])
+        print(f"Indexes are in place for '{collection_name}'.")
+    except Exception as e:
+        print(f"An error occurred during resume index creation: {e}")
+
 def setup_database():
     """ Ensures all necessary collections and their indexes are ready. """
     print("Setting up database collections and indexes...")
     create_indexes("private_jobs")
     create_indexes("govt_jobs")
+    create_resume_indexes("resumes") # This call will now work
     print("Database setup complete.")
 
 setup_database()
+
 
 def custom_semantic_chunker(text: str) -> list[str]:
     """ A rule-based chunker that splits job descriptions by common section headers. """
@@ -75,6 +91,63 @@ def custom_semantic_chunker(text: str) -> list[str]:
          reconstructed_chunks = [p.strip() for p in text.split('\n\n') if p.strip()]
     return [chunk for chunk in reconstructed_chunks if chunk]
 
+def create_resume_indexes(collection_name: str):
+    """ Creates indexes on the resumes collection for efficient filtering. """
+    print(f"Ensuring indexes exist on '{collection_name}' collection...")
+    try:
+        collection = db[collection_name]
+        collection.create_index([("metadata.name", pymongo.ASCENDING)])
+        collection.create_index([("metadata.extracted_skills", pymongo.ASCENDING)])
+        print(f"Indexes are in place for '{collection_name}'.")
+    except Exception as e:
+        print(f"An error occurred during resume index creation: {e}")
+
+def process_and_store_resume(file_path: str, candidate_name: str, candidate_id: str):
+    """
+    Parses a resume, extracts skills locally, creates chunks and embeddings,
+    and stores it in the 'resumes' collection.
+    """
+    print(f"Processing resume for: {candidate_name}")
+    
+    # 1. Parse Resume
+    raw_text = parse_resume(file_path)
+    if not raw_text:
+        print("Failed to parse resume text.")
+        return
+
+    # 2. Extract Skills Locally
+    print("Extracting skills with local model...")
+    skills = extract_skills_with_llm(raw_text)
+    print(f"Extracted skills: {skills}")
+    
+    # 3. Chunking and Embedding
+    chunks_text = custom_semantic_chunker(raw_text)
+    chunk_embeddings = embedder.encode(chunks_text).tolist() if chunks_text else []
+    chunks_data = [
+        {"chunk_text": text, "embedding": chunk_embeddings[i]}
+        for i, text in enumerate(chunks_text)
+    ]
+    
+    # 4. Construct Document
+    resume_document = {
+        "_id": candidate_id,
+        "processed_timestamp": datetime.now(timezone.utc),
+        "metadata": {
+            "name": candidate_name,
+            "source_file": file_path,
+            "extracted_skills": skills
+        },
+        "full_text_raw": raw_text,
+        "chunks": chunks_data
+    }
+
+    # 5. Store in MongoDB
+    collection = db["resumes"]
+    try:
+        collection.update_one({'_id': resume_document['_id']}, {'$set': resume_document}, upsert=True)
+        print(f"Successfully stored resume for '{candidate_name}' in the 'resumes' collection.")
+    except Exception as e:
+        print(f"An error occurred storing the resume: {e}")
 
 def process_and_store_jobs(jobs_df: pd.DataFrame, collection_name: str, clear_collection: bool = False):
     """
