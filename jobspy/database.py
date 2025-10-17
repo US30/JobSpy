@@ -1,10 +1,12 @@
 import os
 import re
+import numpy as np
 from datetime import datetime, date, time, timezone
 from pymongo import MongoClient
 import pandas as pd
 from sentence_transformers import SentenceTransformer
 import pymongo
+from typing import List, Dict, Optional 
 
 # --- New Imports ---
 from .analysis.resume_parser import parse_resume
@@ -102,6 +104,18 @@ def create_resume_indexes(collection_name: str):
     except Exception as e:
         print(f"An error occurred during resume index creation: {e}")
 
+def get_average_embedding(chunks: list) -> Optional[list[float]]:
+    """ Averages the embedding vectors from a list of chunks. """
+    if not chunks:
+        return None
+    
+    embeddings = [chunk['embedding'] for chunk in chunks if 'embedding' in chunk]
+    if not embeddings:
+        return None
+        
+    avg_embedding = np.mean(embeddings, axis=0)
+    return avg_embedding.tolist()
+
 def process_and_store_resume(file_path: str, candidate_name: str, candidate_id: str):
     """
     Parses a resume, extracts skills locally, creates chunks and embeddings,
@@ -128,6 +142,27 @@ def process_and_store_resume(file_path: str, candidate_name: str, candidate_id: 
         for i, text in enumerate(chunks_text)
     ]
     
+    average_embedding = get_average_embedding(chunks_data)
+    
+    resume_document = {
+        "_id": candidate_id,
+        "processed_timestamp": datetime.now(timezone.utc),
+        "metadata": {
+            "name": candidate_name,
+            "source_file": file_path,
+            "extracted_skills": skills
+        },
+        "full_text_raw": raw_text,
+        "chunks": chunks_data, # We still keep the chunks for other potential uses
+        "average_embedding": average_embedding # <-- NEW FIELD
+    }
+
+    collection = db["resumes"]
+    try:
+        collection.update_one({'_id': resume_document['_id']}, {'$set': resume_document}, upsert=True)
+        print(f"Successfully stored resume for '{candidate_name}' with average embedding.")
+    except Exception as e:
+        print(f"An error occurred storing the resume: {e}")
     # 4. Construct Document
     resume_document = {
         "_id": candidate_id,

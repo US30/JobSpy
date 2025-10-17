@@ -5,23 +5,15 @@ from jobspy.database import process_and_store_resume
 from jobspy.analysis.matching import find_best_resumes_for_job
 
 # --- CONFIGURATION ---
-# 1. Create a folder named 'resumes' in your project root.
-# 2. Place one or more sample resume files (.pdf or .docx) inside it.
 RESUMES_TO_PROCESS = {
-    "Utkarsh_Sinha": {"name": "Utkarsh Sinha", "file": "resumes/Utkarsh_Sinha.pdf"},
-    # "jane_smith_02": {"name": "Jane Smith", "file": "resumes/sample_resume_2.docx"},
+    "elon_musk_01": {"name": "Elon Musk", "file": "resumes/Software Developer Resume.pdf"},
 }
-
-# 3. Get a job ID from your database to match against.
-#    Go to Atlas, find a job in 'private_jobs' or 'govt_jobs', and copy its '_id'.
-JOB_ID_TO_MATCH = "linkedin_li-4301359482" # <-- IMPORTANT: Change this to a real ID from your DB
+JOB_ID_TO_MATCH = "linkedin_li-4296641686" # <-- IMPORTANT: Use the Python job ID
 
 def main():
-    """
-    Main function to run the full analysis pipeline.
-    """
-    # Step 1: Process and store all resumes.
-    print("--- Step 1: Processing and Storing Resumes ---")
+    """ Runs the full, final analysis pipeline. """
+    
+    print("--- Step 1: Processing and Storing Resume ---")
     for candidate_id, info in RESUMES_TO_PROCESS.items():
         if os.path.exists(info['file']):
             process_and_store_resume(
@@ -34,20 +26,28 @@ def main():
     
     print("\n" + "="*50 + "\n")
 
-    # Step 2: Find the best resumes for a specific job.
-    print("--- Step 2: Finding Best Resume Matches for the Job ---")
-    top_matches = find_best_resumes_for_job(job_id=JOB_ID_TO_MATCH, limit=5)
+    print("--- Step 2: Finding Best Resume Matches using Hybrid Search ---")
+
+    # Define the hard filters for skills
+    search_filters = {
+        "metadata.extracted_skills": { "$in": ["python", "java"] }
+    }
+    
+    top_matches = find_best_resumes_for_job(
+        job_id=JOB_ID_TO_MATCH,
+        filters=search_filters,
+        limit=5
+    )
     
     if top_matches:
-        print("\n--- Top Matching Candidates ---")
+        print("\n--- Top Matching Candidates (Hybrid Search Results) ---")
         for i, match in enumerate(top_matches):
-            print(f"{i+1}. {match['candidate_name']} (ID: {match['candidate_id']})")
-            print(f"   Match Score: {match['final_score']:.2%}")
-            print(f"   Semantic Fit: {match['semantic_score']:.2%}, Skill Overlap: {match['skill_score']:.2%}")
-            print(f"   Matching Skills: {match['matching_skills']}")
+            print(f"{i+1}. {match['metadata']['name']} (ID: {match['_id']})")
+            print(f"   Semantic Search Score: {match['search_score']:.2%}")
+            print(f"   Extracted Skills: {match['metadata']['extracted_skills']}")
             print("-" * 20)
     else:
-        print("Could not find any matching resumes.")
+        print("Could not find any matching resumes that satisfy the filters.")
 
 if __name__ == "__main__":
     main()
