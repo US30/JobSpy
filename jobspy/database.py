@@ -13,7 +13,9 @@ from .analysis.resume_parser import parse_resume
 from .analysis.llm_analyser import extract_skills_with_llm
 
 # --- CONFIGURATION ---
-MONGO_CONNECTION_STRING = os.environ.get("MONGO_URI", "mongodb://localhost:27017/")
+MONGO_CONNECTION_STRING = os.environ.get("MONGO_URI")
+if not MONGO_CONNECTION_STRING:
+    raise ValueError("MONGO_URI environment variable not set. Please create a .env file.")
 MONGO_DATABASE_NAME = "job_database"
 EMBEDDING_MODEL = 'all-MiniLM-L6-v2'
 

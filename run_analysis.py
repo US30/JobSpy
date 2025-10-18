@@ -1,5 +1,6 @@
 # In run_analysis.py
-
+from dotenv import load_dotenv
+load_dotenv()
 import os
 from jobspy.database import process_and_store_resume
 from jobspy.analysis.matching import find_best_resumes_for_job
@@ -7,6 +8,7 @@ from jobspy.analysis.matching import find_best_resumes_for_job
 # --- CONFIGURATION ---
 RESUMES_TO_PROCESS = {
     "elon_musk_01": {"name": "Elon Musk", "file": "resumes/Software Developer Resume.pdf"},
+    "utkarsh_sinha": {"name": "Utkarsh Sinha", "file": "resumes/Utkarsh_Sinha.pdf"},
 }
 JOB_ID_TO_MATCH = "linkedin_li-4296641686" # <-- IMPORTANT: Use the Python job ID
 
