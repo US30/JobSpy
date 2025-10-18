@@ -11,7 +11,7 @@ print("Initializing local LLM for skill analysis (google/flan-t5-base)...")
 llm_pipeline = pipeline(
     "text2text-generation",
     model="google/flan-t5-base",
-    torch_dtype=torch.bfloat16 # Use bfloat16 for better performance if available
+    dtype=torch.bfloat16 # Use bfloat16 for better performance if available
 )
 print("LLM for skill analysis initialized.")
 
