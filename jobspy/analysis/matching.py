@@ -1,8 +1,9 @@
 # In jobspy/analysis/matching.py
 
 import os
+import openai
 from pymongo import MongoClient
-from sentence_transformers import SentenceTransformer
+from typing import Optional
 
 # --- Initialize components ---
 MONGO_CONNECTION_STRING = os.environ.get("MONGO_URI", "mongodb://localhost:27017/")
@@ -11,9 +12,27 @@ db = client["job_database"]
 resumes_collection = db["resumes"]
 jobs_collection = db["private_jobs"]
 
-print("Initializing sentence-transformer model for matching...")
-embedder = SentenceTransformer('all-MiniLM-L6-v2')
-print("Matching model initialized.")
+if "AZURE_OPENAI_ENDPOINT" not in os.environ or "OPENAI_API_KEY" not in os.environ:
+    raise EnvironmentError("AZURE_OPENAI_ENDPOINT and OPENAI_API_KEY environment variables not found.")
+
+openai_client = openai.AzureOpenAI(
+    azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
+    api_key=os.environ["OPENAI_API_KEY"],
+    api_version=os.environ.get("OPENAI_API_VERSION", "2025-04-01-preview")
+)
+EMBEDDING_MODEL = os.environ.get("EMBEDDING_DEPLOYMENT_NAME", "text-embedding-ada-002")
+print("Azure OpenAI client initialized for matching.")
+
+def get_embedding(text: str, model: str = EMBEDDING_MODEL) -> Optional[list[float]]:
+    """Generates an embedding for a given text using Azure OpenAI's API."""
+    if not text:
+        return None
+    try:
+        response = openai_client.embeddings.create(input=[text], model=model)
+        return response.data[0].embedding
+    except Exception as e:
+        print(f"Error generating embedding: {e}")
+        return None
 
 def find_best_resumes_for_job(job_id: str, filters: dict = {}, limit: int = 5):
     """
@@ -33,7 +52,10 @@ def find_best_resumes_for_job(job_id: str, filters: dict = {}, limit: int = 5):
         print("Job has no description to create an embedding from.")
         return []
     
-    query_vector = embedder.encode(job_description).tolist()
+    query_vector = get_embedding(job_description)
+    if not query_vector:
+        print("Failed to generate job description embedding.")
+        return []
 
     # --- THIS IS THE DEFINITIVE HYBRID SEARCH PIPELINE ---
 

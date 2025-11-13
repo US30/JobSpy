@@ -1,11 +1,22 @@
 # In jobspy/analysis/rag_generator.py
 
 import json
-from .llm_analyser import llm_pipeline # We will reuse the same LLM pipeline
+import openai
+import os
+
+# --- Initialize the Azure OpenAI client ---
+if "AZURE_OPENAI_ENDPOINT" not in os.environ or "OPENAI_API_KEY" not in os.environ:
+    raise EnvironmentError("AZURE_OPENAI_ENDPOINT and OPENAI_API_KEY environment variables not found.")
+
+client = openai.AzureOpenAI(
+    azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
+    api_key=os.environ["OPENAI_API_KEY"],
+    api_version=os.environ.get("OPENAI_API_VERSION", "2025-04-01-preview")
+)
 
 def generate_rag_insights(job_document: dict, candidate_documents: list) -> list:
     """
-    Takes a job and a list of top candidate documents and uses a local LLM to generate
+    Takes a job and a list of top candidate documents and uses the Azure OpenAI API to generate
     summaries, match scores, justifications, and interview questions.
     """
     if not job_document or not candidate_documents:
@@ -51,17 +62,23 @@ def generate_rag_insights(job_document: dict, candidate_documents: list) -> list
         """
 
         try:
-            # --- THE FIX IS HERE ---
-            # 1. Replaced 'max_length' with 'max_new_tokens' to give the model more space for the output.
-            # 2. Added a print statement to see the raw output for debugging.
-            raw_output = llm_pipeline(prompt, max_new_tokens=512, num_beams=3, early_stopping=True)
-            generated_text = raw_output[0]['generated_text']
+            response = client.chat.completions.create(
+                model="gpt-5-mini",
+                messages=[
+                    {"role": "system", "content": "You are an expert Principal Recruiter providing hiring analysis."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={ "type": "json_object" },
+                max_completion_tokens=512,
+            )
+            
+            generated_text = response.choices[0].message.content
 
-            print("\n--- Raw LLM Output ---")
+            print("\n--- Raw Azure OpenAI Output ---")
             print(generated_text)
             print("----------------------\n")
-            # --- END OF FIX ---
 
+<<<<<<< Updated upstream
             clean_json_str = ""
             # Attempt to find JSON within markdown code blocks first
             json_block_start = generated_text.find('```json')
@@ -83,6 +100,12 @@ def generate_rag_insights(job_document: dict, candidate_documents: list) -> list
                 print(f"Successfully generated and parsed insights for {candidate_name}.")
             else:
                 print(f"Warning: Could not find a valid JSON object in the LLM output for {candidate_name}.")
+=======
+            parsed_json = json.loads(generated_text)
+            parsed_json['candidate_id'] = candidate_id
+            generated_results.append(parsed_json)
+            print(f"Successfully generated and parsed insights for {candidate_name}.")
+>>>>>>> Stashed changes
 
         except Exception as e:
             print(f"An error occurred during RAG generation for {candidate_name}: {e}")

@@ -4,7 +4,7 @@ import numpy as np
 from datetime import datetime, date, time, timezone
 from pymongo import MongoClient
 import pandas as pd
-from sentence_transformers import SentenceTransformer
+import openai
 import pymongo
 from typing import List, Dict, Optional 
 
@@ -17,16 +17,33 @@ MONGO_CONNECTION_STRING = os.environ.get("MONGO_URI")
 if not MONGO_CONNECTION_STRING:
     raise ValueError("MONGO_URI environment variable not set. Please create a .env file.")
 MONGO_DATABASE_NAME = "job_database"
-EMBEDDING_MODEL = 'all-MiniLM-L6-v2'
+EMBEDDING_MODEL = os.environ.get("EMBEDDING_DEPLOYMENT_NAME", "text-embedding-ada-002")
 
 # --- INITIALIZATION ---
-print("Initializing sentence-transformer model for embeddings...")
-embedder = SentenceTransformer(EMBEDDING_MODEL)
-print("Embedding model initialized.")
+if "AZURE_OPENAI_ENDPOINT" not in os.environ or "OPENAI_API_KEY" not in os.environ:
+    raise EnvironmentError("AZURE_OPENAI_ENDPOINT and OPENAI_API_KEY environment variables not found.")
 
-client = MongoClient(MONGO_CONNECTION_STRING)
-db = client[MONGO_DATABASE_NAME]
+client = openai.AzureOpenAI(
+    azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
+    api_key=os.environ["OPENAI_API_KEY"],
+    api_version=os.environ.get("OPENAI_API_VERSION", "2025-04-01-preview")
+)
+print("Azure OpenAI client initialized.")
+
+mongo_client = MongoClient(MONGO_CONNECTION_STRING)
+db = mongo_client[MONGO_DATABASE_NAME]
 print(f"Connected to MongoDB. Using database '{MONGO_DATABASE_NAME}'.")
+
+def get_embedding(text: str, model: str = EMBEDDING_MODEL) -> Optional[list[float]]:
+    """Generates an embedding for a given text using Azure OpenAI's API."""
+    if not text:
+        return None
+    try:
+        response = client.embeddings.create(input=[text], model=model)
+        return response.data[0].embedding
+    except Exception as e:
+        print(f"Error generating embedding: {e}")
+        return None
 
 def create_indexes(collection_name: str):
     """ Creates indexes on a specified collection. """
@@ -40,7 +57,6 @@ def create_indexes(collection_name: str):
     except Exception as e:
         print(f"An error occurred during index creation for '{collection_name}': {e}")
 
-# --- ADD THE MISSING FUNCTION DEFINITION HERE ---
 def create_resume_indexes(collection_name: str):
     """ Creates indexes on the resumes collection for efficient filtering. """
     print(f"Ensuring indexes exist on '{collection_name}' collection...")
@@ -57,11 +73,10 @@ def setup_database():
     print("Setting up database collections and indexes...")
     create_indexes("private_jobs")
     create_indexes("govt_jobs")
-    create_resume_indexes("resumes") # This call will now work
+    create_resume_indexes("resumes")
     print("Database setup complete.")
 
 setup_database()
-
 
 def custom_semantic_chunker(text: str) -> list[str]:
     """ A rule-based chunker that splits job descriptions by common section headers. """
@@ -73,13 +88,8 @@ def custom_semantic_chunker(text: str) -> list[str]:
         "what you'll do", "what you will do", "what you'll need", "nice to have", "preferred qualifications"
     ]
     
-    # --- THIS IS THE CORRECTED REGEX LOGIC ---
-    # 1. The pattern does NOT have the inline (?i) flag.
     pattern = r'\n\s*(' + '|'.join(re.escape(h) for h in headers) + r')\s*[:\-]*\s*\n'
-    
-    # 2. The IGNORECASE flag is passed as a separate argument.
     chunks = re.split(pattern, text, flags=re.IGNORECASE)
-    # --- END OF FIX ---
     
     reconstructed_chunks = []
     current_chunk_content = [chunks[0].strip()]
@@ -95,23 +105,12 @@ def custom_semantic_chunker(text: str) -> list[str]:
          reconstructed_chunks = [p.strip() for p in text.split('\n\n') if p.strip()]
     return [chunk for chunk in reconstructed_chunks if chunk]
 
-def create_resume_indexes(collection_name: str):
-    """ Creates indexes on the resumes collection for efficient filtering. """
-    print(f"Ensuring indexes exist on '{collection_name}' collection...")
-    try:
-        collection = db[collection_name]
-        collection.create_index([("metadata.name", pymongo.ASCENDING)])
-        collection.create_index([("metadata.extracted_skills", pymongo.ASCENDING)])
-        print(f"Indexes are in place for '{collection_name}'.")
-    except Exception as e:
-        print(f"An error occurred during resume index creation: {e}")
-
 def get_average_embedding(chunks: list) -> Optional[list[float]]:
     """ Averages the embedding vectors from a list of chunks. """
     if not chunks:
         return None
     
-    embeddings = [chunk['embedding'] for chunk in chunks if 'embedding' in chunk]
+    embeddings = [chunk['embedding'] for chunk in chunks if 'embedding' in chunk and chunk['embedding'] is not None]
     if not embeddings:
         return None
         
@@ -120,28 +119,24 @@ def get_average_embedding(chunks: list) -> Optional[list[float]]:
 
 def process_and_store_resume(file_path: str, candidate_name: str, candidate_id: str):
     """
-    Parses a resume, extracts skills locally, creates chunks and embeddings,
+    Parses a resume, extracts skills, creates chunks and embeddings using Azure OpenAI,
     and stores it in the 'resumes' collection.
     """
     print(f"Processing resume for: {candidate_name}")
     
-    # 1. Parse Resume
     raw_text = parse_resume(file_path)
     if not raw_text:
         print("Failed to parse resume text.")
         return
 
-    # 2. Extract Skills Locally
-    print("Extracting skills with local model...")
+    print("Extracting skills with Azure OpenAI...")
     skills = extract_skills_with_llm(raw_text)
     print(f"Extracted skills: {skills}")
     
-    # 3. Chunking and Embedding
     chunks_text = custom_semantic_chunker(raw_text)
-    chunk_embeddings = embedder.encode(chunks_text).tolist() if chunks_text else []
     chunks_data = [
-        {"chunk_text": text, "embedding": chunk_embeddings[i]}
-        for i, text in enumerate(chunks_text)
+        {"chunk_text": text, "embedding": get_embedding(text)}
+        for text in chunks_text
     ]
     
     average_embedding = get_average_embedding(chunks_data)
@@ -155,8 +150,8 @@ def process_and_store_resume(file_path: str, candidate_name: str, candidate_id: 
             "extracted_skills": skills
         },
         "full_text_raw": raw_text,
-        "chunks": chunks_data, # We still keep the chunks for other potential uses
-        "average_embedding": average_embedding # <-- NEW FIELD
+        "chunks": chunks_data,
+        "average_embedding": average_embedding
     }
 
     collection = db["resumes"]
@@ -165,30 +160,10 @@ def process_and_store_resume(file_path: str, candidate_name: str, candidate_id: 
         print(f"Successfully stored resume for '{candidate_name}' with average embedding.")
     except Exception as e:
         print(f"An error occurred storing the resume: {e}")
-    # 4. Construct Document
-    resume_document = {
-        "_id": candidate_id,
-        "processed_timestamp": datetime.now(timezone.utc),
-        "metadata": {
-            "name": candidate_name,
-            "source_file": file_path,
-            "extracted_skills": skills
-        },
-        "full_text_raw": raw_text,
-        "chunks": chunks_data
-    }
-
-    # 5. Store in MongoDB
-    collection = db["resumes"]
-    try:
-        collection.update_one({'_id': resume_document['_id']}, {'$set': resume_document}, upsert=True)
-        print(f"Successfully stored resume for '{candidate_name}' in the 'resumes' collection.")
-    except Exception as e:
-        print(f"An error occurred storing the resume: {e}")
 
 def process_and_store_jobs(jobs_df: pd.DataFrame, collection_name: str, clear_collection: bool = False):
     """
-    Processes jobs, generates embeddings, and stores them in a specified MongoDB collection.
+    Processes jobs, generates embeddings using Azure OpenAI, and stores them in a specified MongoDB collection.
     """
     if jobs_df.empty:
         print(f"Received an empty DataFrame. No jobs to process for '{collection_name}'.")
@@ -218,8 +193,10 @@ def process_and_store_jobs(jobs_df: pd.DataFrame, collection_name: str, clear_co
         metadata = {k: (None if pd.isna(v) else v) for k, v in metadata.items()}
 
         chunks_text = custom_semantic_chunker(full_description)
-        chunk_embeddings = embedder.encode(chunks_text).tolist() if chunks_text else []
-        chunks_data = [{"chunk_text": text, "embedding": chunk_embeddings[i]} for i, text in enumerate(chunks_text)]
+        chunks_data = [
+            {"chunk_text": text, "embedding": get_embedding(text)}
+            for text in chunks_text
+        ]
 
         job_id = metadata.get('id') or metadata.get('job_url') or index
         unique_id = f"{metadata.get('site', 'unknown')}_{job_id}"
