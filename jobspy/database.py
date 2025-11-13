@@ -17,7 +17,7 @@ MONGO_CONNECTION_STRING = os.environ.get("MONGO_URI")
 if not MONGO_CONNECTION_STRING:
     raise ValueError("MONGO_URI environment variable not set. Please create a .env file.")
 MONGO_DATABASE_NAME = "job_database"
-EMBEDDING_MODEL = os.environ.get("EMBEDDING_DEPLOYMENT_NAME", "text-embedding-ada-002")
+EMBEDDING_MODEL = os.environ.get("OPENAI_EMBEDDING_DEPLOYMENT_NAME", "text-embedding-ada-002")
 
 # --- INITIALIZATION ---
 if "AZURE_OPENAI_ENDPOINT" not in os.environ or "OPENAI_API_KEY" not in os.environ:
@@ -30,6 +30,16 @@ client = openai.AzureOpenAI(
 )
 print("Azure OpenAI client initialized.")
 
+if "AZURE_OPENAI_EMBEDDING_ENDPOINT" not in os.environ or "OPENAI_EMBEDDING_API_KEY" not in os.environ:
+    raise EnvironmentError("AZURE_OPENAI_EMBEDDING_ENDPOINT and OPENAI_EMBEDDING_API_KEY environment variables not found.")
+
+embedding_client = openai.AzureOpenAI(
+    azure_endpoint=os.environ["AZURE_OPENAI_EMBEDDING_ENDPOINT"],
+    api_key=os.environ["OPENAI_EMBEDDING_API_KEY"],
+    api_version=os.environ.get("OPENAI_EMBEDDING_API_VERSION", "2023-05-15")
+)
+print("Azure OpenAI embedding client initialized.")
+
 mongo_client = MongoClient(MONGO_CONNECTION_STRING)
 db = mongo_client[MONGO_DATABASE_NAME]
 print(f"Connected to MongoDB. Using database '{MONGO_DATABASE_NAME}'.")
@@ -39,7 +49,7 @@ def get_embedding(text: str, model: str = EMBEDDING_MODEL) -> Optional[list[floa
     if not text:
         return None
     try:
-        response = client.embeddings.create(input=[text], model=model)
+        response = embedding_client.embeddings.create(input=[text], model=model, dimensions=384)
         return response.data[0].embedding
     except Exception as e:
         print(f"Error generating embedding: {e}")

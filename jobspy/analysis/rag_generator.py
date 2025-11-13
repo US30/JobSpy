@@ -3,6 +3,9 @@
 import json
 import openai
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # --- Initialize the Azure OpenAI client ---
 if "AZURE_OPENAI_ENDPOINT" not in os.environ or "OPENAI_API_KEY" not in os.environ:
@@ -63,7 +66,7 @@ def generate_rag_insights(job_document: dict, candidate_documents: list) -> list
 
         try:
             response = client.chat.completions.create(
-                model="gpt-5-mini",
+                model=os.environ.get("OPENAI_DEPLOYMENT_NAME", "gpt-5-mini"),
                 messages=[
                     {"role": "system", "content": "You are an expert Principal Recruiter providing hiring analysis."},
                     {"role": "user", "content": prompt}
@@ -78,34 +81,10 @@ def generate_rag_insights(job_document: dict, candidate_documents: list) -> list
             print(generated_text)
             print("----------------------\n")
 
-<<<<<<< Updated upstream
-            clean_json_str = ""
-            # Attempt to find JSON within markdown code blocks first
-            json_block_start = generated_text.find('```json')
-            json_block_end = generated_text.rfind('```')
-
-            if json_block_start != -1 and json_block_end != -1 and json_block_start < json_block_end:
-                clean_json_str = generated_text[json_block_start + len('```json'):json_block_end].strip()
-            else:
-                # Fallback to finding the first '{' and last '}'
-                json_start = generated_text.find('{')
-                json_end = generated_text.rfind('}') + 1
-                if json_start != -1 and json_end != -1 and json_start < json_end:
-                    clean_json_str = generated_text[json_start:json_end].strip()
-
-            if clean_json_str:
-                parsed_json = json.loads(clean_json_str)
-                parsed_json['candidate_id'] = candidate_id
-                generated_results.append(parsed_json)
-                print(f"Successfully generated and parsed insights for {candidate_name}.")
-            else:
-                print(f"Warning: Could not find a valid JSON object in the LLM output for {candidate_name}.")
-=======
             parsed_json = json.loads(generated_text)
             parsed_json['candidate_id'] = candidate_id
             generated_results.append(parsed_json)
             print(f"Successfully generated and parsed insights for {candidate_name}.")
->>>>>>> Stashed changes
 
         except Exception as e:
             print(f"An error occurred during RAG generation for {candidate_name}: {e}")

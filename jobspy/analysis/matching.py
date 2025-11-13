@@ -12,15 +12,15 @@ db = client["job_database"]
 resumes_collection = db["resumes"]
 jobs_collection = db["private_jobs"]
 
-if "AZURE_OPENAI_ENDPOINT" not in os.environ or "OPENAI_API_KEY" not in os.environ:
-    raise EnvironmentError("AZURE_OPENAI_ENDPOINT and OPENAI_API_KEY environment variables not found.")
+if "AZURE_OPENAI_EMBEDDING_ENDPOINT" not in os.environ or "OPENAI_EMBEDDING_API_KEY" not in os.environ:
+    raise EnvironmentError("AZURE_OPENAI_EMBEDDING_ENDPOINT and OPENAI_EMBEDDING_API_KEY environment variables not found.")
 
 openai_client = openai.AzureOpenAI(
-    azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
-    api_key=os.environ["OPENAI_API_KEY"],
-    api_version=os.environ.get("OPENAI_API_VERSION", "2025-04-01-preview")
+    azure_endpoint=os.environ["AZURE_OPENAI_EMBEDDING_ENDPOINT"],
+    api_key=os.environ["OPENAI_EMBEDDING_API_KEY"],
+    api_version=os.environ.get("OPENAI_EMBEDDING_API_VERSION", "2023-05-15")
 )
-EMBEDDING_MODEL = os.environ.get("EMBEDDING_DEPLOYMENT_NAME", "text-embedding-ada-002")
+EMBEDDING_MODEL = os.environ.get("OPENAI_EMBEDDING_DEPLOYMENT_NAME", "text-embedding-ada-002")
 print("Azure OpenAI client initialized for matching.")
 
 def get_embedding(text: str, model: str = EMBEDDING_MODEL) -> Optional[list[float]]:
@@ -28,7 +28,7 @@ def get_embedding(text: str, model: str = EMBEDDING_MODEL) -> Optional[list[floa
     if not text:
         return None
     try:
-        response = openai_client.embeddings.create(input=[text], model=model)
+        response = openai_client.embeddings.create(input=[text], model=model, dimensions=384)
         return response.data[0].embedding
     except Exception as e:
         print(f"Error generating embedding: {e}")
