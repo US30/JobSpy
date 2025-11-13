@@ -22,6 +22,11 @@ def extract_skills_with_llm(text: str) -> list[str]:
     if not text:
         return []
 
+    # Truncate the text to fit within the model's context window (approx. 450 words for flan-t5-base)
+    # This is a rough approximation; a more precise method would involve tokenizing and then truncating.
+    # However, for general resume text, word count is a reasonable heuristic.
+    truncated_text = ' '.join(text.split()[:450])
+
     # This prompt is the key. It instructs the local LLM on exactly what to do.
     prompt = f"""
     Based on the following resume text, extract all of the technical skills, programming languages, and software tools mentioned.
@@ -29,15 +34,15 @@ def extract_skills_with_llm(text: str) -> list[str]:
 
     Resume Text:
     ---
-    {text}
+    {truncated_text}
     ---
     
     Extracted Skills:
     """
 
     try:
-        # Generate the text containing the skills
-        raw_output = llm_pipeline(prompt, max_length=256, num_beams=3, early_stopping=True)
+        # Generate the text containing the skills, increasing max_length for potentially longer skill lists
+        raw_output = llm_pipeline(prompt, max_length=512, num_beams=3, early_stopping=True)
         
         # The output is a dictionary, we need the generated text
         skill_string = raw_output[0]['generated_text']

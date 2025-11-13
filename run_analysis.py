@@ -18,6 +18,11 @@ def main():
     """ Runs the full analysis pipeline, including Phase 3 RAG generation. """
     
     print("--- Step 1: Processing and Storing Resume ---")
+    # Clear the resumes collection before processing new ones
+    print("Clearing existing resumes from the database...")
+    db["resumes"].delete_many({})
+    print("Resumes collection cleared.")
+
     for candidate_id, info in RESUMES_TO_PROCESS.items():
         if os.path.exists(info['file']):
             process_and_store_resume(file_path=info['file'], candidate_name=info['name'], candidate_id=candidate_id)
@@ -34,9 +39,23 @@ def main():
         print("Could not find any matching resumes. Halting process.")
         return
         
-    print("\n--- Top Hybrid Search Results ---")
+    print("\n--- Top Hybrid Search Results (with skill filter) ---")
     for i, match in enumerate(top_matches):
         print(f"{i+1}. {match['metadata']['name']} (ID: {match['_id']}) - Score: {match['search_score']:.2%}")
+    
+    print("\n" + "="*50 + "\n")
+
+    # --- NEW SECTION: Displaying Top 5 Semantic Search Results (without skill filter) ---
+    print("--- Top 5 Semantic Search Results (without skill filter) ---")
+    # Temporarily remove the hard filter to see all semantic matches
+    all_semantic_matches = find_best_resumes_for_job(job_id=JOB_ID_TO_MATCH, filters={}, limit=5)
+
+    if not all_semantic_matches:
+        print("No semantic matches found.")
+    else:
+        for i, match in enumerate(all_semantic_matches):
+            name = match.get('metadata', {}).get('name', 'N/A')
+            print(f"{i+1}. {name} (ID: {match['_id']}) - Score: {match['search_score']:.2%}")
     
     print("\n" + "="*50 + "\n")
 

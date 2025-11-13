@@ -62,10 +62,21 @@ def generate_rag_insights(job_document: dict, candidate_documents: list) -> list
             print("----------------------\n")
             # --- END OF FIX ---
 
-            json_start = generated_text.find('{')
-            json_end = generated_text.rfind('}') + 1
-            if json_start != -1 and json_end != -1:
-                clean_json_str = generated_text[json_start:json_end]
+            clean_json_str = ""
+            # Attempt to find JSON within markdown code blocks first
+            json_block_start = generated_text.find('```json')
+            json_block_end = generated_text.rfind('```')
+
+            if json_block_start != -1 and json_block_end != -1 and json_block_start < json_block_end:
+                clean_json_str = generated_text[json_block_start + len('```json'):json_block_end].strip()
+            else:
+                # Fallback to finding the first '{' and last '}'
+                json_start = generated_text.find('{')
+                json_end = generated_text.rfind('}') + 1
+                if json_start != -1 and json_end != -1 and json_start < json_end:
+                    clean_json_str = generated_text[json_start:json_end].strip()
+
+            if clean_json_str:
                 parsed_json = json.loads(clean_json_str)
                 parsed_json['candidate_id'] = candidate_id
                 generated_results.append(parsed_json)
