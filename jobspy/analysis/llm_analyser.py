@@ -70,15 +70,9 @@ def extract_skills_with_llm(text: str) -> list[str]:
                 {"role": "system", "content": "You are a helpful assistant that extracts skills from text."},
                 {"role": "user", "content": prompt}
             ],
-            # --- THE FINAL, DEFINITIVE FIX IS HERE, BASED ON YOUR CORRECTIONS ---
-            max_completion_tokens=512, # The correct parameter name
-            # Removed the unsupported 'temperature' parameter
+            max_completion_tokens=4096, 
+            
         )
-        
-        # We will keep this for one final confirmation.
-        print("\n--- Full Raw API Response ---")
-        print(response)
-        print("---------------------------\n")
         
         skill_string = response.choices[0].message.content or ""
         

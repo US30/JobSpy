@@ -67,7 +67,7 @@ def find_best_resumes_for_job(job_id: str, filters: dict = {}, limit: int = 5):
                 "index": "vector_index",
                 "path": "average_embedding",
                 "queryVector": query_vector,
-                "numCandidates": 200, # Cast a wide net
+                "numCandidates": 2000, # Cast a wide net
                 "limit": 100          # Get the top 100 semantic matches
             }
         },
@@ -92,7 +92,7 @@ def find_best_resumes_for_job(job_id: str, filters: dict = {}, limit: int = 5):
         # Create a dictionary to hold the scores for easy lookup
         candidate_scores = {result['_id']: result['search_score'] for result in semantic_results}
         candidate_ids = list(candidate_scores.keys())
-
+        
         # Step 2: Perform a precise METADATA filter on the results of Step 1.
         print(f"Step 2: Applying hard filter to the {len(candidate_ids)} candidates: {filters}")
         
@@ -105,6 +105,8 @@ def find_best_resumes_for_job(job_id: str, filters: dict = {}, limit: int = 5):
         
         # Execute the final find query
         hybrid_matches = list(resumes_collection.find(final_query))
+        
+        # print(f"Hybrid matches before sorting: {hybrid_matches}")
         
         # Add the search score back to the final results
         for match in hybrid_matches:

@@ -79,8 +79,7 @@ def main():
             print(f"  Match Score: {result.get('match_score', 'N/A')}/100")
             print(f"  Justification: {result.get('justification', 'N/A')}")
             print("  Summary:")
-            for point in result.get('summary', []):
-                print(f"    - {point}")
+            print(f"    {result.get('summary', 'N/A')}")
             print("  Interview Questions:")
             for i, q in enumerate(result.get('interview_questions', [])):
                 print(f"    {i+1}. {q}")

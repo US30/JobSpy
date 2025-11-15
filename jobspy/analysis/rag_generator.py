@@ -33,7 +33,7 @@ def generate_rag_insights(job_document: dict, candidate_documents: list) -> list
     for candidate in candidate_documents:
         candidate_name = candidate.get('metadata', {}).get('name', 'N/A')
         candidate_skills = candidate.get('metadata', {}).get('extracted_skills', [])
-        candidate_text = candidate.get('full_text_raw', '')
+        candidate_text = candidate.get('full_text_raw', '')[:4000] # Truncate to 4000 characters
         candidate_id = candidate.get('_id')
         
         print(f"\n--- Generating AI Insights for candidate: {candidate_name} ---")
@@ -72,14 +72,10 @@ def generate_rag_insights(job_document: dict, candidate_documents: list) -> list
                     {"role": "user", "content": prompt}
                 ],
                 response_format={ "type": "json_object" },
-                max_completion_tokens=512,
+                max_completion_tokens=10000,
             )
             
             generated_text = response.choices[0].message.content
-
-            print("\n--- Raw Azure OpenAI Output ---")
-            print(generated_text)
-            print("----------------------\n")
 
             parsed_json = json.loads(generated_text)
             parsed_json['candidate_id'] = candidate_id

@@ -38,7 +38,6 @@ embedding_client = openai.AzureOpenAI(
     api_key=os.environ["OPENAI_EMBEDDING_API_KEY"],
     api_version=os.environ.get("OPENAI_EMBEDDING_API_VERSION", "2023-05-15")
 )
-print("Azure OpenAI embedding client initialized.")
 
 mongo_client = MongoClient(MONGO_CONNECTION_STRING)
 db = mongo_client[MONGO_DATABASE_NAME]
@@ -167,7 +166,7 @@ def process_and_store_resume(file_path: str, candidate_name: str, candidate_id: 
     collection = db["resumes"]
     try:
         collection.update_one({'_id': resume_document['_id']}, {'$set': resume_document}, upsert=True)
-        print(f"Successfully stored resume for '{candidate_name}' with average embedding.")
+
     except Exception as e:
         print(f"An error occurred storing the resume: {e}")
 
